@@ -13,26 +13,22 @@ try:
 except LookupError:
     nltk.download('punkt_tab')
 
-def unzip():
-    zip_filename = "swda.zip"
-    subdir = "swda"
-    url = "https://github.com/cgpotts/swda/raw/master/swda.zip"
-
-    # Ensure the subdirectory exists:
+def unzip(url, subdir):
+    # Ensure the subdirectory exists
     if not os.path.exists(subdir):
         os.makedirs(subdir)
 
-    # Ensure the zip exists:
-    if not os.path.exists(zip_filename):
-        print(f'{zip_filename} not found. Downloading from {url}...')
-        response = requests.get(url)
-        with open(zip_filename, 'wb') as f:
-            f.write(response.content)
-
     # If 'swda/swda-metadata.csv' does not exist, then this indicates the zip
-    # has not been unzipped. So we should unzip it now:
+    # has not been extracted, so unzip it now:
     if not os.path.exists(os.path.join(subdir, 'swda-metadata.csv')):
-        # Extract zip file into that subdir
+        # Ensure the zip exists
+        if not os.path.exists(f"{subdir}.zip"):
+            print(f'{zip_filename} not found. Downloading from {url}...')
+            response = requests.get(url)
+            with open(zip_filename, 'wb') as f:
+                f.write(response.content)
+
+        # Extract zip file into subdir
         print(f'Extracting {zip_filename} into {subdir}...')
         with zipfile.ZipFile(zip_filename, 'r') as zip_ref:
             zip_ref.extractall()
@@ -107,7 +103,7 @@ def save_transcripts_for_fasttext(base_dir, metadata_file, output_file):
     print(f"Processed all transcripts and saved to {output_file}")
 """
 
-def save_transcripts_for_fasttext(subdirs, metadata_file, output_file):
+def transcripts_to_fasttext(subdirs, metadata_file, output_file):
     with open(output_file, 'w') as out_f:
         # Step 1: Process each specified subdirectory
         for subdir_path in subdirs:
@@ -153,23 +149,27 @@ def save_transcripts_for_fasttext(subdirs, metadata_file, output_file):
     print(f"Processed all transcripts and saved to {output_file}")
 
 def main():
-    unzip()
+    data_dir = "swda"
+    url = "https://github.com/cgpotts/swda/raw/master/swda.zip"
+    # Ensure data_dir is populated. Download/extract swda.zip if necessary
+    unzip(url, data_dir)
 
-    base_dir = "swda"
-    metadata_file = os.path.join(base_dir, "swda-metadata.csv")
-
-    # Process contents of training file and output FastText-labeled stuff
-    # train_utt = "swda/sw00utt/sw_0001_4325.utt.csv"
-    # utt_to_fasttext(train_utt, train_ft, metadata_file)
+    metadata_file = os.path.join(data_dir, "swda-metadata.csv")
+    # Combine files in TRAIN_DIRS into one big training file in FastText format
     train_ft = "train.ft"
     if not os.path.exists(train_ft):
         TRAIN_DIRS = ["sw00utt", "sw01utt"]
-        TRAIN_DIRS = [os.path.join(base_dir, filename) for filename in TRAIN_DIRS]
+        TRAIN_DIRS = [os.path.join(data_dir, filename) for filename in TRAIN_DIRS]
         save_transcripts_for_fasttext(TRAIN_DIRS, metadata_file, train_ft)
 
-    model = fasttext.train_supervised(train_ft)
+    # Train the model on training set
+    model = fasttext.train_supervised(train_ft,
+                                      # lr=1.0,
+                                      epoch=500
+                                      )
 
     # Measure performance on training set
+    # test() returns (number of samples, precision at one, and recall at one)
     print(f"Performance on training set: "
           f"\t{model.test('train.ft')[1]*100:.2f}% accuracy")
 
@@ -177,12 +177,10 @@ def main():
     # Retrieve later with:
     # model = fasttext.load_model("trained_model.bin")
 
-    # validation_utt = "swda/sw00utt/sw_0002_4330.utt.csv"
-    # utt_to_fasttext(validation_utt, validation_ft, metadata_file)
     validation_ft = "validation.ft"
     if not os.path.exists(validation_ft):
         VALIDATION_DIRS = ["sw02utt", "sw03utt"]
-        VALIDATION_DIRS = [os.path.join(base_dir, filename) for filename in VALIDATION_DIRS]
+        VALIDATION_DIRS = [os.path.join(data_dir, filename) for filename in VALIDATION_DIRS]
         save_transcripts_for_fasttext(VALIDATION_DIRS, metadata_file, validation_ft)
 
     # Measure performance on validation set
