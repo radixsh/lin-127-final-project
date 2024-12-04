@@ -4,8 +4,6 @@ import requests
 import fasttext
 import nltk
 
-from swda import Transcript
-
 try:
     nltk.data.find('tokenizers/punkt_tab')
 except LookupError:
@@ -68,6 +66,10 @@ def transcripts_to_fasttext(subdirs, metadata_file, output_file):
     print(f"Processed all transcripts and saved to {output_file}")
 
 def train():
+    # The import needs to be in this function, not in the root namespace,
+    # because `setup` needs to import train() without knowing what `Transcript`
+    # is 
+    from swda import Transcript
     data_dir = "swda"
 
     # Preprocess the training data: Combine files in TRAIN_DIRS into one big

@@ -4,13 +4,13 @@
 *.ft
 *.bin
 
-# Utterances
-swb1_dialogact_annot.tar.gz
-swb1_dialogact_annot/
-
-# Annotations, metadata
+# Project files 
+swda.py
+swda_functions.py
 swda.zip
 swda/
+swb1_dialogact_annot.tar.gz
+swb1_dialogact_annot/
 
 # Mac-specific files
 __MACOSX/
