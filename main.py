@@ -1,20 +1,40 @@
 import os
-import tarfile
-import urllib.request
+import zipfile
+import requests
 import fasttext
 import nltk
 
 from swda import Transcript
 
 try:
-    nltk.data.find('tokenizers/punkt')
+    nltk.data.find('tokenizers/punkt_tab')
 except LookupError:
-    nltk.download('punkt')
+    nltk.download('punkt_tab')
+
+def download():
+    # somethign is weird
+    pass
+
+    # url = 'https://github.com/cgpotts/swda/blob/master/swda.zip?raw=true'
+    # download_dir = "data"
+
+    # # Check if the subdirectory already exists
+    # if not os.path.exists(download_dir):
+    #     os.makedirs(download_dir)
+
+    # # Download the zip file
+    # response = requests.get(url)
+    # with open(zip_file_path, 'wb') as f:
+    #     f.write(response.content)
+
+    # # Extract the zip file if not already extracted
+    # if not os.path.exists(os.path.join(download_dir, 'swda')):
+    #     with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
+    #         zip_ref.extractall(download_dir)
 
 metadata_filename = "swda/swda-metadata.csv"
 # Format it in a way FastText wants
 def process_data(input_file, output_file):
-    print("got here")
     # Make a Transcript obj for this file
     shitty_thing = "swda/sw00utt/sw_0001_4325.utt.csv"
     trans = Transcript(shitty_thing, metadata_filename)
@@ -24,37 +44,12 @@ def process_data(input_file, output_file):
 
     with open(output_file, 'w') as out:
         for utt in trans.utterances:
-            for sentence in nltk.tokenize.sent_tokenize(utt):
-                formatted = (f"__label__{utt.caller_sex} "
-                             f"wordcount:{len(nltk.tokenize.word_tokenize(sentence))} "
-                             f"tag:{utt.act_tag}"
-                             f"sentence:{sentence}")
+            for sentence in nltk.tokenize.sent_tokenize(utt.text):
+                formatted = (f'__label__{utt.caller_sex} '
+                             f'wordcount:{len(nltk.tokenize.word_tokenize(sentence))} '
+                             f'tag:{utt.act_tag} '
+                             f'sentence:"{sentence}"')
                 out.write(formatted.lower() + "\n")
-
-    output_file.close()
-
-def download():
-    # Download tar and unzip it here if the folder doesn't already exist
-    foldername = "swb1_dialogact_annot"
-    if not os.path.exists(foldername):
-        filename = "swb1_dialogact_annot.tar.gz"
-        url = "http://www.stanford.edu/~jurafsky/swb1_dialogact_annot.tar.gz"
-        # Check if the file exists in the current directory
-        if not os.path.exists(filename):
-            print(f"{filename} not found in the current directory. Downloading...")
-            urllib.request.urlretrieve(url, filename)
-            print(f"Downloaded {filename}.")
-        else:
-            print(f"{filename} already exists in the current directory.")
-
-        # Extract the file
-        if tarfile.is_tarfile(filename):
-            print(f"Extracting {filename}...")
-            with tarfile.open(filename, "r:gz") as tar:
-                tar.extractall(path=foldername)  # Extracts to the current directory
-            print(f"Extraction complete.")
-        else:
-            print(f"{filename} is not a valid tar.gz file.")
 
 def main():
     download()

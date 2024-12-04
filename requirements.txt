@@ -1,10 +1,15 @@
+certifi==2024.8.30
+charset-normalizer==3.4.0
 click==8.1.7
 fasttext==0.9.1
+idna==3.10
 joblib==1.4.2
 nltk==3.9.1
 numpy==2.0.2
 pybind11==2.13.6
 python-dateutil==2.9.0.post0
 regex==2024.11.6
+requests==2.32.3
 six==1.16.0
 tqdm==4.67.1
+urllib3==2.2.3
