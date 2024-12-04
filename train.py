@@ -9,7 +9,7 @@ try:
 except LookupError:
     nltk.download('punkt_tab')
 
-def transcripts_to_fasttext(subdirs, metadata_file, output_file):
+def transcripts_to_fasttext(subdirs, metadata_file, output_file, Transcript):
     with open(output_file, 'w') as outfile:
         # Step 1: Process each specified subdirectory
         for subdir_path in subdirs:
@@ -79,7 +79,7 @@ def train():
     if not os.path.exists(train_ft):
         TRAIN_DIRS = ["sw00utt", "sw01utt"]
         TRAIN_DIRS = [os.path.join(data_dir, filename) for filename in TRAIN_DIRS]
-        transcripts_to_fasttext(TRAIN_DIRS, metadata_file, train_ft)
+        transcripts_to_fasttext(TRAIN_DIRS, metadata_file, train_ft, Transcript)
 
     # Train and test the model on training set
     model = fasttext.train_supervised(train_ft,
@@ -99,7 +99,8 @@ def train():
     if not os.path.exists(validation_ft):
         VALIDATION_DIRS = ["sw02utt", "sw03utt"]
         VALIDATION_DIRS = [os.path.join(data_dir, filename) for filename in VALIDATION_DIRS]
-        transcripts_to_fasttext(VALIDATION_DIRS, metadata_file, validation_ft)
+        transcripts_to_fasttext(VALIDATION_DIRS, metadata_file, validation_ft,
+                                Transcript)
 
     # Measure performance on validation set
     validation_performance = model.test('validation.ft')
