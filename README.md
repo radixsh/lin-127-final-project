@@ -9,10 +9,11 @@ will also manually label features
 Gender for now, education level later
 
 ### Features to guess gender and education level:
-- sentence length (number of words in each verbalization)
-- presence of fillers ("uh", "um")
-- number of questions vs statements
-- 1st person vs 3rd person pronouns ("I"/"me" vs "we" vs "you" vs "they")
+- word count (sentence length; number of words in each verbalization)
+- act_tag:
+	- presence of fillers ("uh", "um")
+	- number of questions vs statements
+	- 1st person vs 3rd person pronouns ("I"/"me" vs "we" vs "you" vs "they")
 - number of times they got interrupted???
 
 See if the data is skewed/biased (are there more examples of men/men than
