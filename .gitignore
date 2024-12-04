@@ -1,3 +1,6 @@
 *.swp
 .venv
-sw*
+.DS_Store
+swb1_dialogact_annot.tar.gz
+swb1_dialogact_annot/
+swda.zip
