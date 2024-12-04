@@ -1,6 +1,7 @@
 import os
 import tarfile
 import urllib.request
+import fasttext
 
 # Download tar and unzip it here if the folder doesn't already exist
 foldername = "swb1_dialogact_annot"
@@ -24,5 +25,4 @@ if not os.path.exists(foldername):
     else:
         print(f"{filename} is not a valid tar.gz file.")
 
-# Iterate through it
-
+# Format it in a way FastText wants 
