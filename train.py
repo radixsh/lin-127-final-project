@@ -3,8 +3,6 @@ import zipfile
 import requests
 import fasttext
 import nltk
-import csv
-from pprint import pprint
 
 from swda import Transcript
 
@@ -12,26 +10,6 @@ try:
     nltk.data.find('tokenizers/punkt_tab')
 except LookupError:
     nltk.download('punkt_tab')
-
-def unzip(url, subdir):
-    # Ensure the subdirectory exists
-    if not os.path.exists(subdir):
-        os.makedirs(subdir)
-
-    # If 'swda/swda-metadata.csv' does not exist, then this indicates the zip
-    # has not been extracted, so unzip it now:
-    if not os.path.exists(os.path.join(subdir, 'swda-metadata.csv')):
-        # Ensure the zip exists
-        if not os.path.exists(f"{subdir}.zip"):
-            print(f'{zip_filename} not found. Downloading from {url}...')
-            response = requests.get(url)
-            with open(zip_filename, 'wb') as f:
-                f.write(response.content)
-
-        # Extract zip file into subdir
-        print(f'Extracting {zip_filename} into {subdir}...')
-        with zipfile.ZipFile(zip_filename, 'r') as zip_ref:
-            zip_ref.extractall()
 
 def transcripts_to_fasttext(subdirs, metadata_file, output_file):
     with open(output_file, 'w') as outfile:
@@ -59,10 +37,10 @@ def transcripts_to_fasttext(subdirs, metadata_file, output_file):
                         # Extract speaker's education level from metadata
                         caller = utt.caller  # 'A' or 'B'
                         conversation_no = utt.conversation_no
-                        education_level = (transcript.metadata[conversation_no]["from_caller_education"]
-                                           if caller == "A"
-                                           else
-                                           transcript.metadata[conversation_no]["to_caller_education"])
+                        # education_level = (transcript.metadata[conversation_no]["from_caller_education"]
+                        #                    if caller == "A"
+                        #                    else
+                        #                    transcript.metadata[conversation_no]["to_caller_education"])
                         sex = (transcript.metadata[conversation_no]["from_caller_sex"]
                                if caller == "A"
                                else
@@ -77,7 +55,9 @@ def transcripts_to_fasttext(subdirs, metadata_file, output_file):
                             word_count = len(nltk.tokenize.word_tokenize(sentence))
 
                             # Create the formatted FastText line
-                            formatted = (f'__label__{education_level}{utt.caller_sex} '
+                            formatted = (f'__label__'
+                                         # f'{education_level}'
+                                         f'{utt.caller_sex} '
                                          f'wordcount:{word_count} '
                                          f'tag:{utt.act_tag} '
                                          f'sentence:"{sentence.lower()}"')
@@ -87,12 +67,8 @@ def transcripts_to_fasttext(subdirs, metadata_file, output_file):
 
     print(f"Processed all transcripts and saved to {output_file}")
 
-def main():
+def train():
     data_dir = "swda"
-
-    # Download/extract swda.zip if necessary
-    url = "https://github.com/cgpotts/swda/raw/master/swda.zip"
-    unzip(url, data_dir)
 
     # Preprocess the training data: Combine files in TRAIN_DIRS into one big
     # training file in FastText format
@@ -106,7 +82,7 @@ def main():
     # Train and test the model on training set
     model = fasttext.train_supervised(train_ft,
                                       # lr=1.0,
-                                      epoch=100,
+                                      epoch=10,
                                       )
     train_performance = model.test('train.ft')
     print(f"Performance on train set "
@@ -134,4 +110,4 @@ def main():
     # test_utt = "swda/sw00utt/sw_0003_4103.utt.csv"
 
 if __name__ == "__main__":
-    main()
+    train()
