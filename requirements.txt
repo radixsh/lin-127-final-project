@@ -1,3 +1,8 @@
+click==8.1.7
 fasttext==0.9.1
+joblib==1.4.2
+nltk==3.9.1
 numpy==2.0.2
 pybind11==2.13.6
+regex==2024.11.6
+tqdm==4.67.1
