@@ -5,8 +5,6 @@ import fasttext
 import nltk
 import csv
 
-from swda import Transcript
-
 try:
     nltk.data.find('tokenizers/punkt_tab')
 except LookupError:
@@ -15,14 +13,26 @@ except LookupError:
 def unzip():
     zip_filename = "swda.zip"
     subdir = "swda"
+    url = "https://github.com/cgpotts/swda/raw/master/swda.zip"
 
-    # Check if the subdirectory already exists
+    # Ensure the subdirectory exists:
     if not os.path.exists(subdir):
         os.makedirs(subdir)
 
+    # Ensure the zip exists:
+    if not os.path.exists(zip_filename):
+        print(f'{zip_filename} not found. Downloading from {url}...')
+        response = requests.get(url)
+        with open(zip_filename, 'wb') as f:
+            f.write(response.content)
+
+    # If 'swda/swda-metadata.csv' does not exist, then this indicates the zip
+    # has not been unzipped. So we should unzip it now:
+    if not os.path.exists(os.path.join(subdir, 'swda-metadata.csv')):
         # Extract zip file into that subdir
-        with zipfile.ZipFile(zip_file, 'r') as zip_ref:
-            zip_ref.extractall(subdir)
+        print(f'Extracting {zip_filename} into {subdir}...')
+        with zipfile.ZipFile(zip_filename, 'r') as zip_ref:
+            zip_ref.extractall()
 
 # Format .utt into FastText-labeled format
 def utt_to_fasttext(input_file, output_file):
