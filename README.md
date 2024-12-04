@@ -24,3 +24,6 @@ examples of women/women calls?)
 Then feed this to FastText and bingo bango bongo
 
 Use built-in Transcript object in swda.py to combine
+
+# Sources
+https://github.com/cgpotts/swda
