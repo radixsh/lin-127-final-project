@@ -2,6 +2,7 @@
 .venv
 *.swp
 *.ft
+*.bin
 
 # Utterances
 swb1_dialogact_annot.tar.gz
