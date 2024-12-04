@@ -1,6 +1,7 @@
 # General development files
 .venv
 *.swp
+*.ft
 
 # Utterances
 swb1_dialogact_annot.tar.gz
