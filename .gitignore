@@ -1,6 +1,15 @@
-*.swp
+# General development files
 .venv
-.DS_Store
+*.swp
+
+# Utterances
 swb1_dialogact_annot.tar.gz
 swb1_dialogact_annot/
+
+# Annotations, metadata
 swda.zip
+swda/
+
+# Mac-specific files
+__MACOSX/
+.DS_Store
