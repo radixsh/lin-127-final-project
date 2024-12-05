@@ -32,7 +32,7 @@ def get_swda(py_url, zip_url, subdir):
         with zipfile.ZipFile(zip_filename, 'r') as zip_ref:
             zip_ref.extractall()
 
-def main():
+def setup():
     data_dir = "swda"
 
     # Download `swda.py` and `swda.zip` if necessary
@@ -41,4 +41,4 @@ def main():
     get_swda(py_url, zip_url, data_dir)
 
 if __name__ == "__main__":
-    main()
+    setup()
