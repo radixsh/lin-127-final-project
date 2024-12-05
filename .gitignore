@@ -15,3 +15,5 @@ swb1_dialogact_annot/
 # Mac-specific files
 __MACOSX/
 .DS_Store
+LIN127.code-workspace
+__pycache__
