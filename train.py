@@ -1,5 +1,6 @@
 import os
 import string
+import time
 
 import zipfile
 import requests
@@ -10,6 +11,8 @@ try:
     nltk.data.find('tokenizers/punkt_tab')
 except LookupError:
     nltk.download('punkt_tab')
+
+DATA_DIR = "swda"
 
 def cleanup(sentence):
     # Remove <<sound environment comments>>
@@ -31,7 +34,7 @@ def cleanup(sentence):
 
     return sentence
 
-def transcripts_to_fasttext(subdirs, metadata_file, output_file, Transcript):
+def transcripts_to_fasttext(subdirs, output_file, Transcript):
     with open(output_file, 'w') as outfile:
         # Step 1: Process each specified subdirectory
         for subdir_path in subdirs:
@@ -47,6 +50,7 @@ def transcripts_to_fasttext(subdirs, metadata_file, output_file, Transcript):
 
                     # Step 3: Create a Transcript object
                     try:
+                        metadata_file = os.path.join(DATA_DIR, "swda-metadata.csv")
                         transcript = Transcript(filepath, metadata_file)
                     except Exception as e:
                         print(f"Error processing file {filepath}: {e}")
@@ -96,21 +100,66 @@ def transcripts_to_fasttext(subdirs, metadata_file, output_file, Transcript):
 
     print(f"Processed all transcripts and saved to {output_file}")
 
+
+def validate(model, VALIDATION_DIRS, Transcript):
+    # Preprocess the validation data
+    validation_ft = "validation.ft"
+    if not os.path.exists(validation_ft):
+        VALIDATION_DIRS = [os.path.join(DATA_DIR, filename) for filename in VALIDATION_DIRS]
+        transcripts_to_fasttext(VALIDATION_DIRS, validation_ft, Transcript)
+
+    # Measure performance on validation set
+    validation_performance = model.test('validation.ft')
+    print(f"Performance on validation set "
+          f"({validation_performance[0]} entries): "
+          f"\t{validation_performance[1]*100:.2f}% precision, "
+          f"{validation_performance[2]*100:.2f}% recall")
+
+def test(model, TEST_DIRS, Transcript):
+    # Preprocess the test data
+    test_ft = "test.ft"
+    if not os.path.exists(test_ft):
+        TEST_DIRS = [os.path.join(DATA_DIR, filename) for filename in TEST_DIRS]
+        transcripts_to_fasttext(TEST_DIRS, test_ft, Transcript)
+
+    # Measure performance on test set
+    test_performance = model.test('test.ft')
+    print(f"Performance on test set "
+          f"({test_performance[0]} entries): "
+          f"\t{test_performance[1]*100:.2f}% precision, "
+          f"{test_performance[2]*100:.2f}% recall")
+
+
+
 def train():
+    start = time.time()
+
+    TRAIN_DIRS = []
+    VALIDATION_DIRS = []
+    TEST_DIRS = []
+    for i in range(0, 13):
+        filename = f"sw{i:02}utt"
+        if i < 7:
+            TRAIN_DIRS.append(filename)
+        elif i < 10:
+            VALIDATION_DIRS.append(filename)
+        else:
+            TEST_DIRS.append(filename)
+    print(f"TRAIN_DIRS: {TRAIN_DIRS}")
+    print(f"VALIDATION_DIRS: {VALIDATION_DIRS}")
+    print(f"TEST_DIRS: {TEST_DIRS}")
+
     # The import needs to be in this function, not in the root namespace,
     # because `setup` needs to import train() without knowing what `Transcript`
     # is
     from swda import Transcript
-    data_dir = "swda"
 
     # Preprocess the training data: Combine files in TRAIN_DIRS into one big
     # training file in FastText format
-    metadata_file = os.path.join(data_dir, "swda-metadata.csv")
     train_ft = "train.ft"
     if not os.path.exists(train_ft):
-        TRAIN_DIRS = ["sw00utt", "sw01utt"]
-        TRAIN_DIRS = [os.path.join(data_dir, filename) for filename in TRAIN_DIRS]
-        transcripts_to_fasttext(TRAIN_DIRS, metadata_file, train_ft, Transcript)
+        TRAIN_DIRS = [os.path.join(DATA_DIR, filename) for filename in TRAIN_DIRS]
+        transcripts_to_fasttext(TRAIN_DIRS, train_ft, Transcript)
 
     # Train and test the model on training set
     model = fasttext.train_supervised(train_ft,
@@ -125,23 +174,14 @@ def train():
 
     model.save_model("model.bin")
 
-    # Preprocess the validation data
-    validation_ft = "validation.ft"
-    if not os.path.exists(validation_ft):
-        VALIDATION_DIRS = ["sw02utt", "sw03utt"]
-        VALIDATION_DIRS = [os.path.join(data_dir, filename) for filename in VALIDATION_DIRS]
-        transcripts_to_fasttext(VALIDATION_DIRS, metadata_file, validation_ft,
-                                Transcript)
+    trained = time.time()
+    print(f"Finished training in {trained - start:.2f} seconds")
 
-    # Measure performance on validation set
-    validation_performance = model.test('validation.ft')
-    print(f"Performance on validation set "
-          f"({validation_performance[0]} entries): "
-          f"\t{validation_performance[1]*100:.2f}% precision, "
-          f"{validation_performance[2]*100:.2f}% recall")
+    validate(model, VALIDATION_DIRS, Transcript)
+    test(model, TEST_DIRS, Transcript)
 
-    # Test later??
-    # test_utt = "swda/sw00utt/sw_0003_4103.utt.csv"
+    end = time.time()
+    print(f"Finished overall in {end - start:.2f} seconds")
 
 if __name__ == "__main__":
     train()
