@@ -34,7 +34,69 @@ def cleanup(sentence):
 
     return sentence
 
-def transcripts_to_fasttext(subdirs, output_file, Transcript):
+def add_sentences(output_file, transcript):
+    metadata = transcript.metadata
+    idx = transcript.conversation_no
+
+    for utt in transcript.utterances:
+        is_first_speaker = (utt.caller == 'A')
+
+        sex = (metadata[idx]["from_caller_sex"] if utt.caller == "A"
+               else metadata[idx]["to_caller_sex"])
+
+        # Divide utterance into sentences
+        sentences = nltk.tokenize.sent_tokenize(utt.text)
+
+        # Process each sentence
+        for sentence in sentences:
+            if sentence == "/":
+                # Ignore "sentences" that are just "/"
+                continue
+
+            sentence = cleanup(sentence)
+
+            # Count words in the sentence
+            sentence_wc = len(nltk.tokenize.word_tokenize(sentence))
+
+            # Create the formatted FastText line
+            formatted = (f'__label__{utt.caller_sex} '
+                         f'is_first_speaker:{is_first_speaker} '
+                         f'type:sentence '
+                         f'sentence_wc:{sentence_wc} '
+                         f'tag:{utt.act_tag} '
+                         f'sentence:"{sentence.lower()}"')
+
+            # Write to the output file
+            output_file.write(formatted.lower() + "\n")
+
+def add_conversations(output_file, transcript):
+    metadata = transcript.metadata
+    idx = transcript.conversation_no
+
+    for caller in ["A", "B"]:
+        is_first_speaker = (caller == 'A')
+
+        sex = (metadata[idx]["from_caller_sex"] if caller == "A"
+               else metadata[idx]["to_caller_sex"])
+
+        side = ""
+        for utt in transcript.utterances:
+            if utt.caller == caller:
+                side += f"{caller}: {utt.text}"
+
+        word_count = len(side.split())
+
+        # Create the formatted FastText line
+        formatted = (f'__label__{sex} '
+                     f'is_first_speaker:{is_first_speaker} '
+                     f'type:conversation_side '
+                     f'conversation_wc:{word_count} '
+                     f'side:"{side}"')
+
+        # Write to the output file
+        output_file.write(formatted.lower() + "\n")
+
+def make_fasttext(subdirs, output_file, Transcript):
     with open(output_file, 'w') as outfile:
         # Step 1: Process each specified subdirectory
         for subdir_path in subdirs:
@@ -43,7 +105,7 @@ def transcripts_to_fasttext(subdirs, output_file, Transcript):
                 continue
 
             # Step 2: Iterate over .utt.csv files
-            print(f"Combining/processing files in {subdir_path} into {output_file}...")
+            print(f"Processing files in {subdir_path}...")
             for filename in os.listdir(subdir_path):
                 if filename.endswith(".utt.csv"):
                     filepath = os.path.join(subdir_path, filename)
@@ -56,57 +118,17 @@ def transcripts_to_fasttext(subdirs, output_file, Transcript):
                         print(f"Error processing file {filepath}: {e}")
                         continue
 
-                    # Step 4: Iterate over utterances in the Transcript
-                    for utt in transcript.utterances:
-                        # Extract speaker's education level from metadata
-                        caller = utt.caller  # 'A' or 'B'
-                        conversation_no = utt.conversation_no
-                        # education_level = (transcript.metadata[conversation_no]["from_caller_education"]
-                        #                    if caller == "A"
-                        #                    else
-                        #                    transcript.metadata[conversation_no]["to_caller_education"])
-                        sex = (transcript.metadata[conversation_no]["from_caller_sex"]
-                               if caller == "A"
-                               else
-                               transcript.metadata[conversation_no]["to_caller_sex"])
+                    add_conversations(outfile, transcript)
+                    add_sentences(outfile, transcript)
 
-                        is_first_speaker = (utt.caller == 'A')
-
-                        # Divide utterance into sentences
-                        sentences = nltk.tokenize.sent_tokenize(utt.text)
-
-                        # Process each sentence
-                        for sentence in sentences:
-                            if sentence == "/":
-                                # Ignore "sentences" that are just "/"
-                                continue
-
-                            sentence = cleanup(sentence)
-
-                            # Count words in the sentence
-                            word_count = len(nltk.tokenize.word_tokenize(sentence))
-
-                            # Create the formatted FastText line
-                            formatted = (f'__label__'
-                                         # f'{education_level}'
-                                         f'{utt.caller_sex} '
-                                         f'is_first_speaker:{is_first_speaker} '
-                                         f'wordcount:{word_count} '
-                                         f'tag:{utt.act_tag} '
-                                         f'sentence:"{sentence.lower()}"')
-
-                            # Write to the output file
-                            outfile.write(formatted.lower() + "\n")
-
-    print(f"Processed all transcripts and saved to {output_file}")
-
+    print(f"Saved sentences and conversation sides to {output_file}")
 
 def validate(model, VALIDATION_DIRS, Transcript):
     # Preprocess the validation data
     validation_ft = "validation.ft"
-    if not os.path.exists(validation_ft):
-        VALIDATION_DIRS = [os.path.join(DATA_DIR, filename) for filename in VALIDATION_DIRS]
-        transcripts_to_fasttext(VALIDATION_DIRS, validation_ft, Transcript)
+    VALIDATION_DIRS = [os.path.join(DATA_DIR, filename) for filename in VALIDATION_DIRS]
+    print(f"VALIDATION_DIRS: {VALIDATION_DIRS}")
+    make_fasttext(VALIDATION_DIRS, validation_ft, Transcript)
 
     # Measure performance on validation set
     validation_performance = model.test('validation.ft')
@@ -118,9 +140,9 @@ def validate(model, VALIDATION_DIRS, Transcript):
 def test(model, TEST_DIRS, Transcript):
     # Preprocess the test data
     test_ft = "test.ft"
-    if not os.path.exists(test_ft):
-        TEST_DIRS = [os.path.join(DATA_DIR, filename) for filename in TEST_DIRS]
-        transcripts_to_fasttext(TEST_DIRS, test_ft, Transcript)
+    TEST_DIRS = [os.path.join(DATA_DIR, filename) for filename in TEST_DIRS]
+    print(f"TEST_DIRS: {TEST_DIRS}")
+    make_fasttext(TEST_DIRS, test_ft, Transcript)
 
     # Measure performance on test set
     test_performance = model.test('test.ft')
@@ -128,8 +150,6 @@ def test(model, TEST_DIRS, Transcript):
           f"({test_performance[0]} entries): "
           f"\t{test_performance[1]*100:.2f}% precision, "
           f"{test_performance[2]*100:.2f}% recall")
-
-
 
 def train():
     start = time.time()
@@ -145,9 +165,6 @@ def train():
             VALIDATION_DIRS.append(filename)
         else:
             TEST_DIRS.append(filename)
-    print(f"TRAIN_DIRS: {TRAIN_DIRS}")
-    print(f"VALIDATION_DIRS: {VALIDATION_DIRS}")
-    print(f"TEST_DIRS: {TEST_DIRS}")
 
     # The import needs to be in this function, not in the root namespace,
     # because `setup` needs to import train() without knowing what `Transcript`
@@ -157,9 +174,9 @@ def train():
     # Preprocess the training data: Combine files in TRAIN_DIRS into one big
     # training file in FastText format
     train_ft = "train.ft"
-    if not os.path.exists(train_ft):
-        TRAIN_DIRS = [os.path.join(DATA_DIR, filename) for filename in TRAIN_DIRS]
-        transcripts_to_fasttext(TRAIN_DIRS, train_ft, Transcript)
+    TRAIN_DIRS = [os.path.join(DATA_DIR, filename) for filename in TRAIN_DIRS]
+    print(f"TRAIN_DIRS: {TRAIN_DIRS}")
+    make_fasttext(TRAIN_DIRS, train_ft, Transcript)
 
     # Train and test the model on training set
     model = fasttext.train_supervised(train_ft,
