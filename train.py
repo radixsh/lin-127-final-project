@@ -1,4 +1,6 @@
 import os
+import string
+
 import zipfile
 import requests
 import fasttext
@@ -8,6 +10,26 @@ try:
     nltk.data.find('tokenizers/punkt_tab')
 except LookupError:
     nltk.download('punkt_tab')
+
+def cleanup(sentence):
+    # Remove <<sound environment comments>>
+    # re.sub(r'<<.*?>>', '', sentence)
+    while '<<' in sentence and '>>' in sentence:
+        start = sentence.find('<<')
+        end = sentence.find('>>', start)
+        if start != -1 and end != -1:
+            # Remove <<...>> including brackets
+            sentence = sentence[:start] + sentence[end + 2:]
+        else:
+            break
+
+    # Make lowercase
+    sentence = sentence.lower()
+
+    # Remove all punctuation
+    sentence.translate(str.maketrans('', '', string.punctuation))
+
+    return sentence
 
 def transcripts_to_fasttext(subdirs, metadata_file, output_file, Transcript):
     with open(output_file, 'w') as outfile:
@@ -44,11 +66,19 @@ def transcripts_to_fasttext(subdirs, metadata_file, output_file, Transcript):
                                else
                                transcript.metadata[conversation_no]["to_caller_sex"])
 
+                        is_first_speaker = (utt.caller == 'A')
+
                         # Divide utterance into sentences
                         sentences = nltk.tokenize.sent_tokenize(utt.text)
 
                         # Process each sentence
                         for sentence in sentences:
+                            if sentence == "/":
+                                # Ignore "sentences" that are just "/"
+                                continue
+
+                            sentence = cleanup(sentence)
+
                             # Count words in the sentence
                             word_count = len(nltk.tokenize.word_tokenize(sentence))
 
@@ -56,6 +86,7 @@ def transcripts_to_fasttext(subdirs, metadata_file, output_file, Transcript):
                             formatted = (f'__label__'
                                          # f'{education_level}'
                                          f'{utt.caller_sex} '
+                                         f'is_first_speaker:{is_first_speaker} '
                                          f'wordcount:{word_count} '
                                          f'tag:{utt.act_tag} '
                                          f'sentence:"{sentence.lower()}"')
@@ -68,7 +99,7 @@ def transcripts_to_fasttext(subdirs, metadata_file, output_file, Transcript):
 def train():
     # The import needs to be in this function, not in the root namespace,
     # because `setup` needs to import train() without knowing what `Transcript`
-    # is 
+    # is
     from swda import Transcript
     data_dir = "swda"
 
