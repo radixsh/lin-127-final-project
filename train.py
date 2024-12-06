@@ -7,6 +7,8 @@ import requests
 import fasttext
 import nltk
 
+from extract_features import format_sentence, format_conv
+
 try:
     nltk.data.find('tokenizers/punkt_tab')
 except LookupError:
@@ -49,6 +51,7 @@ def add_sentences(output_file, transcript):
 
         # Process each sentence
         for sentence in sentences:
+
             if sentence == "/":
                 # Ignore "sentences" that are just "/"
                 continue
@@ -59,6 +62,21 @@ def add_sentences(output_file, transcript):
             sentence_wc = len(nltk.tokenize.word_tokenize(sentence))
 
             # Create the formatted FastText line
+            # Returns None if the line was garbage, e.g. just "/"
+            formatted_sent = format_sentence(sentence)
+
+            if formatted_sent:
+                output_file.write(
+                    f'__label__{utt.caller_sex} '
+                    f'is_first_speaker:{is_first_speaker} '
+                    f'type:sentence '
+                    f'sentence_wc:{sentence_wc} '
+                    f'tag:{utt.act_tag} '
+                    + formatted_sent
+                )
+
+
+           
             formatted = (f'__label__{utt.caller_sex} '
                          f'is_first_speaker:{is_first_speaker} '
                          f'type:sentence '
