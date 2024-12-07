@@ -93,11 +93,19 @@ def add_sentences(output_file, transcript):
                 output_file.write(formatted_sent)
 
 def side_to_sentences(text):
+    # Convert tuple into paragraph
+    text = ''.join(text)
+
+    # Get sentences
     sentences = nltk.tokenize.sent_tokenize(text)
+    # nltk doesn't recognize "/" as a sentence divider, so divide it manually
+    split_at_slashes = []
+    for sent in sentences:
+        split_at_slashes.extend(sent.split("/"))
 
     result = ""
     # Go through and destroy anything too short, and clean up the others
-    for sent in sentences:
+    for sent in split_at_slashes:
         if len(sent) <= 8:
             continue
         sent = purge_enclosed(sent)
@@ -150,14 +158,11 @@ def add_conversations(output_file, transcript):
         output_file.write(formatted.lower() + "\n")
 
 def format_partial_conversation(features, tuple_of_sentences):
-    # avg_sentence_length is currently broken because tuple_of_sentences doesn't
-    # properly split at "/" but rather only at "." (and whatever else nltk
-    # sent_tokenize splits at, in side_to_sentences() call)
-    '''
+    # Get average length of sentences
+    sentences = side_to_sentences(tuple_of_sentences)
     lengths = []
-    for sent in tuple_of_sentences:
+    for sent in sentences:
         lengths.append(len(nltk.tokenize.word_tokenize(sent)))
-
     avg_sentence_length = sum(lengths) / len(lengths)
     if avg_sentence_length < 7:
         features['avg_length'] = "short"
@@ -165,7 +170,6 @@ def format_partial_conversation(features, tuple_of_sentences):
         features['avg_length'] = "medium"
     else:
         features['avg_length'] = "long"
-    '''
 
     # Create the formatted FastText line
     formatted = f"__label__{features['sex']} "
@@ -190,9 +194,6 @@ def add_partial_conversations(output_file, transcript):
         side_count = 0
         for utt in transcript.utterances:
             if utt.caller == caller:
-                # print(f'side_to_sentences: {side_to_sentences(utt.text)}')
-                # sents = side_to_sentences(utt.text)
-                # sentences.extend(side_to_sentences(utt.text))
                 side.append(utt)
                 side_count += 1
         GRAM_LENGTH = side_count - 1
@@ -206,7 +207,6 @@ def add_partial_conversations(output_file, transcript):
         else:
             sentence_ngrams = list(itertools.combinations(
                 utterance_strings, GRAM_LENGTH))
-            # sentence_ngrams = magic(transcript.utterances)
 
         # Process every combination of GRAM_LENGTH sentences
         for sentence_ngram in sentence_ngrams:
@@ -216,8 +216,6 @@ def add_partial_conversations(output_file, transcript):
             else:
                 global FEMALE_ENTRIES
                 FEMALE_ENTRIES += len(sentence_ngrams)
-            # print(f'sentence_ngram: {sentence_ngram}')
-            # print(f'type(sentence_ngram): {type(sentence_ngram)}')
             # Process and write out
             formatted = format_partial_conversation(features, sentence_ngram)
             output_file.write(formatted + "\n")
