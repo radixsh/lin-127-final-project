@@ -2,13 +2,14 @@ import os
 import string
 import time
 from collections import defaultdict
+import re
 
 import zipfile
 import requests
 import fasttext
 import nltk
 
-from extract_features import format_sentence, format_conv, get_word_lemma_counts
+from extract_features import format_sentence, format_conv, get_word_lemma_counts, purge_enclosed, clean_square_brackets
 
 try:
     nltk.data.find('tokenizers/punkt_tab')
@@ -40,6 +41,29 @@ def cleanup(sentence):
     sentence.translate(str.maketrans('', '', string.punctuation))
 
     return sentence
+
+def add_words(output_file, transcript):
+    metadata = transcript.metadata
+    idx = transcript.conversation_no
+
+    for utt in transcript.utterances:
+        is_first_speaker = (utt.caller == 'A')
+
+        sex = (metadata[idx]["from_caller_sex"] if utt.caller == "A"
+               else metadata[idx]["to_caller_sex"])
+
+        # Divide utterance into sentences
+        tokens = re.split(r'\s+|/(?=\s)|(?<=\s)/|(?<!\w)/|(?<=\s)[^\w\']',
+                          utt.text)
+        words = [token for token in tokens if token.isalnum()]
+
+        # Process each sentence
+        for word in words:
+            formatted = (f'__label__{utt.caller_sex} '
+                         f'is_first_speaker:{is_first_speaker} '
+                         f'type:word '
+                         f'word:{word}')
+            output_file.write(formatted + '\n')
 
 def add_sentences(output_file, transcript):
     metadata = transcript.metadata
@@ -81,9 +105,24 @@ def add_sentences(output_file, transcript):
                 f'is_first_speaker:{is_first_speaker} '
                 f'type:sentence '
                 f'is_bh:{is_backchannel} '
-                
+
                 formatted_sent = preformat + formatted_sent
                 output_file.write(formatted_sent)
+
+def side_to_sentences(text):
+    sentences = nltk.tokenize.sent_tokenize(text)
+
+    result = ""
+    # Go through and destroy anything too short, and clean up the others
+    for sent in sentences:
+        if len(sent) <= 8:
+            continue
+        sent = purge_enclosed(sent)
+        sent = " ".join(clean_square_brackets(sent).split())
+        sent = sent.lower()
+        result += sent + " "
+
+    return result
 
 def add_conversations(output_file, transcript):
     metadata = transcript.metadata
@@ -98,15 +137,30 @@ def add_conversations(output_file, transcript):
         side = ""
         for utt in transcript.utterances:
             if utt.caller == caller:
-                side += f"{caller}: {utt.text}"
+                side += side_to_sentences(utt.text)
 
-        word_count = len(side.split())
+        sentences = nltk.tokenize.sent_tokenize(side)
+        broken_at_slashes = []
+        for sent in sentences:
+            broken_at_slashes.extend(sent.split("/"))
+
+        lengths = []
+        for sent in broken_at_slashes:
+            lengths.append(len(nltk.tokenize.word_tokenize(sent)))
+
+        avg_sentence_length = sum(lengths) / len(lengths)
+        if avg_sentence_length < 7:
+            avg_length = "short"
+        elif avg_sentence_length < 14:
+            avg_length = "medium"
+        else:
+            avg_length = "long"
 
         # Create the formatted FastText line
         formatted = (f'__label__{sex} '
                      f'is_first_speaker:{is_first_speaker} '
                      f'type:conversation_side '
-                     f'conversation_wc:{word_count} '
+                     f'avg_length:{avg_length} '
                      f'side:"{side}"')
 
         # Write to the output file
@@ -134,7 +188,8 @@ def make_fasttext(subdirs, output_file, Transcript):
                         print(f"Error processing file {filepath}: {e}")
                         continue
 
-                    #add_conversations(outfile, transcript)
+                    add_words(outfile, transcript)
+                    add_conversations(outfile, transcript)
                     add_sentences(outfile, transcript)
 
     print(f"Saved sentences and conversation sides to {output_file}")
@@ -175,11 +230,11 @@ def train():
     TEST_DIRS = []
     for i in range(0, 13):
         filename = f"sw{i:02}utt"
-        if i < 7:
+        if i == 0:#< 7:
             TRAIN_DIRS.append(filename)
-        elif i < 10:
+        elif i == 1:#< 10:
             VALIDATION_DIRS.append(filename)
-        else:
+        elif i == 2:
             TEST_DIRS.append(filename)
 
     # The import needs to be in this function, not in the root namespace,
@@ -199,7 +254,7 @@ def train():
     print("Total words: " + str(sum(wordcounts.values())))
     print("Unique words: " + str(len(wordcounts.keys())))
 
-    words_filtered = 0 
+    words_filtered = 0
 
     for lemma, count in wordcounts.items():
         # 72 is about 0.01% of the corpus
@@ -213,8 +268,8 @@ def train():
 
     print("Words filtered: " + str(words_filtered))
 
-    top_divisive_words = dict(sorted(word_disparities.items(), 
-                         key=lambda x: x[1], 
+    top_divisive_words = dict(sorted(word_disparities.items(),
+                         key=lambda x: x[1],
                          reverse=True)[:30]).keys()
     print("Most divisive words: " + str(top_divisive_words))
 
