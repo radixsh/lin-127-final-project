@@ -22,6 +22,8 @@ DATA_DIR = "swda"
 wordcounts = defaultdict(float)
 male_wordcounts = defaultdict(float)
 female_wordcounts = defaultdict(float)
+MALE_ENTRIES = 0
+FEMALE_ENTRIES = 0
 
 def add_words(output_file, transcript):
     metadata = transcript.metadata
@@ -208,6 +210,12 @@ def add_partial_conversations(output_file, transcript):
 
         # Process every combination of GRAM_LENGTH sentences
         for sentence_ngram in sentence_ngrams:
+            if features['sex'] == 'MALE':
+                global MALE_ENTRIES
+                MALE_ENTRIES += len(sentence_ngrams)
+            else:
+                global FEMALE_ENTRIES
+                FEMALE_ENTRIES += len(sentence_ngrams)
             # print(f'sentence_ngram: {sentence_ngram}')
             # print(f'type(sentence_ngram): {type(sentence_ngram)}')
             # Process and write out
@@ -319,6 +327,9 @@ def train():
     print(f"TRAIN_DIRS: {TRAIN_DIRS}")
     make_fasttext(TRAIN_DIRS, train_ft, Transcript)
 
+    print(f"{MALE_ENTRIES} male partial conversations in training")
+    print(f"{FEMALE_ENTRIES} female partial conversations in training")
+
     word_disparities = defaultdict(float)
 
     print("Total words: " + str(sum(wordcounts.values())))
@@ -342,6 +353,7 @@ def train():
                          key=lambda x: x[1],
                          reverse=True)[:30]).keys()
     print("Most divisive words: " + str(top_divisive_words))
+
 
     # Train and test the model on training set
     model = fasttext.train_supervised(train_ft,
