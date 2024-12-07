@@ -3,6 +3,7 @@ import string
 import time
 from collections import defaultdict
 import re
+import itertools
 
 import zipfile
 import requests
@@ -21,26 +22,6 @@ DATA_DIR = "swda"
 wordcounts = defaultdict(float)
 male_wordcounts = defaultdict(float)
 female_wordcounts = defaultdict(float)
-
-def cleanup(sentence):
-    # Remove <<sound environment comments>>
-    # re.sub(r'<<.*?>>', '', sentence)
-    while '<<' in sentence and '>>' in sentence:
-        start = sentence.find('<<')
-        end = sentence.find('>>', start)
-        if start != -1 and end != -1:
-            # Remove <<...>> including brackets
-            sentence = sentence[:start] + sentence[end + 2:]
-        else:
-            break
-
-    # Make lowercase
-    sentence = sentence.lower()
-
-    # Remove all punctuation
-    sentence.translate(str.maketrans('', '', string.punctuation))
-
-    return sentence
 
 def add_words(output_file, transcript):
     metadata = transcript.metadata
@@ -166,6 +147,94 @@ def add_conversations(output_file, transcript):
         # Write to the output file
         output_file.write(formatted.lower() + "\n")
 
+def format_partial_conversation(features, tuple_of_sentences):
+    # avg_sentence_length is currently broken because tuple_of_sentences doesn't
+    # properly split at "/" but rather only at "." (and whatever else nltk
+    # sent_tokenize splits at, in side_to_sentences() call)
+    '''
+    lengths = []
+    for sent in tuple_of_sentences:
+        lengths.append(len(nltk.tokenize.word_tokenize(sent)))
+
+    avg_sentence_length = sum(lengths) / len(lengths)
+    if avg_sentence_length < 7:
+        features['avg_length'] = "short"
+    elif avg_sentence_length < 14:
+        features['avg_length'] = "medium"
+    else:
+        features['avg_length'] = "long"
+    '''
+
+    # Create the formatted FastText line
+    formatted = f"__label__{features['sex']} "
+    for feature in features.keys():
+        if feature == 'sex':    # Already did this one as __label__ for FastText
+            continue
+        formatted += f"{feature}:{features[feature]} "
+    formatted += f'partial_conversation:"{tuple_of_sentences}"'
+    return formatted
+
+def add_partial_conversations(output_file, transcript):
+    metadata = transcript.metadata
+    idx = transcript.conversation_no
+
+    for caller in ["A", "B"]:
+        features = {'is_first_speaker': (caller == 'A'),
+                    'sex': (metadata[idx]["from_caller_sex"] if caller == "A"
+                            else metadata[idx]["to_caller_sex"])}
+
+        # Get all sentences spoken by caller A
+        side = []
+        side_count = 0
+        for utt in transcript.utterances:
+            if utt.caller == caller:
+                # print(f'side_to_sentences: {side_to_sentences(utt.text)}')
+                # sents = side_to_sentences(utt.text)
+                # sentences.extend(side_to_sentences(utt.text))
+                side.append(utt)
+                side_count += 1
+        GRAM_LENGTH = side_count - 1
+
+        # Use itertools.combinations to get every possible combination of 10
+        # sentences spoken by caller A
+        sentence_ngrams = []
+        utterance_strings = [utt.text for utt in side]
+        if len(side) < GRAM_LENGTH:
+            sentence_ngrams = [utterance_strings]
+        else:
+            sentence_ngrams = list(itertools.combinations(
+                utterance_strings, GRAM_LENGTH))
+            # sentence_ngrams = magic(transcript.utterances)
+
+        # Process every combination of GRAM_LENGTH sentences
+        for sentence_ngram in sentence_ngrams:
+            # print(f'sentence_ngram: {sentence_ngram}')
+            # print(f'type(sentence_ngram): {type(sentence_ngram)}')
+            # Process and write out
+            formatted = format_partial_conversation(features, sentence_ngram)
+            output_file.write(formatted + "\n")
+        # print(f"Processed all {GRAM_LENGTH}-utt subsets of caller {caller}'s "
+        #       f"side of conversation {idx}")
+
+        '''
+        sentences = nltk.tokenize.sent_tokenize(side)
+        broken_at_slashes = []
+        for sent in sentences:
+            broken_at_slashes.extend(sent.split("/"))
+
+        lengths = []
+        for sent in broken_at_slashes:
+            lengths.append(len(nltk.tokenize.word_tokenize(sent)))
+
+        avg_sentence_length = sum(lengths) / len(lengths)
+        if avg_sentence_length < 7:
+            avg_length = "short"
+        elif avg_sentence_length < 14:
+            avg_length = "medium"
+        else:
+            avg_length = "long"
+        '''
+
 def make_fasttext(subdirs, output_file, Transcript):
     with open(output_file, 'w') as outfile:
         # Step 1: Process each specified subdirectory
@@ -188,9 +257,10 @@ def make_fasttext(subdirs, output_file, Transcript):
                         print(f"Error processing file {filepath}: {e}")
                         continue
 
-                    add_words(outfile, transcript)
-                    add_conversations(outfile, transcript)
-                    add_sentences(outfile, transcript)
+                    # add_words(outfile, transcript)
+                    # add_conversations(outfile, transcript)
+                    add_partial_conversations(outfile, transcript)
+                    # add_sentences(outfile, transcript)
 
     print(f"Saved sentences and conversation sides to {output_file}")
 
@@ -290,7 +360,9 @@ def train():
     print(f"Finished training in {trained - start:.2f} seconds")
 
     validate(model, VALIDATION_DIRS, Transcript)
-    test(model, TEST_DIRS, Transcript)
+
+    # No peeking
+    # test(model, TEST_DIRS, Transcript)
 
     end = time.time()
     print(f"Finished overall in {end - start:.2f} seconds")
