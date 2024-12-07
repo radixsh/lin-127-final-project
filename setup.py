@@ -39,6 +39,8 @@ def setup():
     py_url = "https://github.com/cgpotts/swda/raw/master/swda.py"
     zip_url = "https://github.com/cgpotts/swda/raw/master/swda.zip"
     get_swda(py_url, zip_url, data_dir)
+    nltk.download('averaged_perceptron_tagger_eng')
+    nltk.download('wordnet')
 
 if __name__ == "__main__":
     setup()

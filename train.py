@@ -1,13 +1,14 @@
 import os
 import string
 import time
+from collections import defaultdict
 
 import zipfile
 import requests
 import fasttext
 import nltk
 
-from extract_features import format_sentence, format_conv
+from extract_features import format_sentence, format_conv, get_word_lemma_counts
 
 try:
     nltk.data.find('tokenizers/punkt_tab')
@@ -15,6 +16,10 @@ except LookupError:
     nltk.download('punkt_tab')
 
 DATA_DIR = "swda"
+
+wordcounts = defaultdict(float)
+male_wordcounts = defaultdict(float)
+female_wordcounts = defaultdict(float)
 
 def cleanup(sentence):
     # Remove <<sound environment comments>>
@@ -51,41 +56,34 @@ def add_sentences(output_file, transcript):
 
         # Process each sentence
         for sentence in sentences:
+            sentence_lemmas = get_word_lemma_counts(sentence)
+
+            for lemma, count in sentence_lemmas.items():
+                wordcounts[lemma] += count
+                if sex == 'MALE':
+                    male_wordcounts[lemma] += count
+                elif sex == 'FEMALE':
+                    female_wordcounts[lemma] += count
 
             if sentence == "/":
                 # Ignore "sentences" that are just "/"
                 continue
 
-            sentence = cleanup(sentence)
-
-            # Count words in the sentence
-            sentence_wc = len(nltk.tokenize.word_tokenize(sentence))
+            is_backchannel = ('bh' == utt.act_tag)
 
             # Create the formatted FastText line
             # Returns None if the line was garbage, e.g. just "/"
             formatted_sent = format_sentence(sentence)
 
             if formatted_sent:
-                output_file.write(
-                    f'__label__{utt.caller_sex} '
-                    f'is_first_speaker:{is_first_speaker} '
-                    f'type:sentence '
-                    f'sentence_wc:{sentence_wc} '
-                    f'tag:{utt.act_tag} '
-                    + formatted_sent
-                )
 
-
-           
-            formatted = (f'__label__{utt.caller_sex} '
-                         f'is_first_speaker:{is_first_speaker} '
-                         f'type:sentence '
-                         f'sentence_wc:{sentence_wc} '
-                         f'tag:{utt.act_tag} '
-                         f'sentence:"{sentence.lower()}"')
-
-            # Write to the output file
-            output_file.write(formatted.lower() + "\n")
+                preformat = f'__label__{utt.caller_sex} '
+                f'is_first_speaker:{is_first_speaker} '
+                f'type:sentence '
+                f'is_bh:{is_backchannel} '
+                
+                formatted_sent = preformat + formatted_sent
+                output_file.write(formatted_sent)
 
 def add_conversations(output_file, transcript):
     metadata = transcript.metadata
@@ -136,7 +134,7 @@ def make_fasttext(subdirs, output_file, Transcript):
                         print(f"Error processing file {filepath}: {e}")
                         continue
 
-                    add_conversations(outfile, transcript)
+                    #add_conversations(outfile, transcript)
                     add_sentences(outfile, transcript)
 
     print(f"Saved sentences and conversation sides to {output_file}")
@@ -195,6 +193,30 @@ def train():
     TRAIN_DIRS = [os.path.join(DATA_DIR, filename) for filename in TRAIN_DIRS]
     print(f"TRAIN_DIRS: {TRAIN_DIRS}")
     make_fasttext(TRAIN_DIRS, train_ft, Transcript)
+
+    word_disparities = defaultdict(float)
+
+    print("Total words: " + str(sum(wordcounts.values())))
+    print("Unique words: " + str(len(wordcounts.keys())))
+
+    words_filtered = 0 
+
+    for lemma, count in wordcounts.items():
+        # 72 is about 0.01% of the corpus
+        if count > 72:
+            disparity = abs(male_wordcounts[lemma] - female_wordcounts[lemma]) / count
+            word_disparities[lemma] = disparity
+        else:
+            words_filtered += 1
+
+    print("Words remaining: " + str(len(word_disparities.keys())))
+
+    print("Words filtered: " + str(words_filtered))
+
+    top_divisive_words = dict(sorted(word_disparities.items(), 
+                         key=lambda x: x[1], 
+                         reverse=True)[:30]).keys()
+    print("Most divisive words: " + str(top_divisive_words))
 
     # Train and test the model on training set
     model = fasttext.train_supervised(train_ft,
