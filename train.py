@@ -27,8 +27,7 @@ except LookupError:
     nltk.download('punkt_tab')
 
 DATA_DIR = "swda"
-
-OVERSAMPLE_FACTOR_AND_EPOCHS = 3
+COUNT = 0
 
 regex_tokenizer = RegexpTokenizer(r'\w+')
 syllable_tokenizer = SyllableTokenizer()
@@ -69,115 +68,6 @@ def get_word_lemma_counts(sent):
     
     return out
 
-# def add_words(output_file, transcript):
-#     metadata = transcript.metadata
-#     idx = transcript.conversation_no
-
-#     for utt in transcript.utterances:
-#         is_first_speaker = (utt.caller == 'A')
-
-#         sex = (metadata[idx]["from_caller_sex"] if utt.caller == "A"
-#                else metadata[idx]["to_caller_sex"])
-
-#         # Divide utterance into sentences
-#         tokens = re.split(r'\s+|/(?=\s)|(?<=\s)/|(?<!\w)/|(?<=\s)[^\w\']',
-#                           utt.text)
-#         words = [token for token in tokens if token.isalnum()]
-
-#         # Process each sentence
-#         for word in words:
-#             formatted = (f'__label__{utt.caller_sex} '
-#                          f'is_first_speaker:{is_first_speaker} '
-#                          f'type:word '
-#                          f'word:{word}')
-#             output_file.write(formatted + '\n')
-
-# def add_sentences(output_file, transcript):
-#     metadata = transcript.metadata
-#     idx = transcript.conversation_no
-
-#     for utt in transcript.utterances:
-#         is_first_speaker = (utt.caller == 'A')
-
-#         sex = (metadata[idx]["from_caller_sex"] if utt.caller == "A"
-#                else metadata[idx]["to_caller_sex"])
-
-#         # Divide utterance into sentences
-#         sentences = nltk.tokenize.sent_tokenize(utt.text)
-
-#         # Process each sentence
-#         for sentence in sentences:
-#             sentence_lemmas = get_word_lemma_counts(sentence)
-
-#             for lemma, count in sentence_lemmas.items():
-#                 wordcounts[lemma] += count
-#                 if sex == 'MALE':
-#                     male_wordcounts[lemma] += count
-#                 elif sex == 'FEMALE':
-#                     female_wordcounts[lemma] += count
-
-#             if sentence == "/":
-#                 # Ignore "sentences" that are just "/"
-#                 continue
-
-#             is_backchannel = ('bh' == utt.act_tag)
-
-#             # Create the formatted FastText line
-#             # Returns None if the line was garbage, e.g. just "/"
-#             formatted_sent = format_sentence(sentence)
-
-#             if formatted_sent:
-
-#                 preformat = f'__label__{utt.caller_sex} '
-#                 #f'is_first_speaker:{is_first_speaker} '
-#                 #f'type:sentence '
-#                 #f'is_bh:{is_backchannel} '
-
-#                 formatted_sent = preformat + formatted_sent
-#                 output_file.write(formatted_sent)
-
-# def add_conversations(output_file, transcript):
-#     metadata = transcript.metadata
-#     idx = transcript.conversation_no
-
-#     for caller in ["A", "B"]:
-#         is_first_speaker = (caller == 'A')
-
-#         sex = (metadata[idx]["from_caller_sex"] if caller == "A"
-#                else metadata[idx]["to_caller_sex"])
-
-#         side = ""
-#         for utt in transcript.utterances:
-#             if utt.caller == caller:
-#                 side += side_to_sentences(utt.text)
-
-#         sentences = nltk.tokenize.sent_tokenize(side)
-#         broken_at_slashes = []
-#         for sent in sentences:
-#             broken_at_slashes.extend(sent.split("/"))
-
-#         lengths = []
-#         for sent in broken_at_slashes:
-#             lengths.append(len(nltk.tokenize.word_tokenize(sent)))
-
-#         avg_sentence_length = sum(lengths) / len(lengths)
-#         if avg_sentence_length < 7:
-#             avg_length = "short"
-#         elif avg_sentence_length < 14:
-#             avg_length = "medium"
-#         else:
-#             avg_length = "long"
-
-#         # Create the formatted FastText line
-#         formatted = (f'__label__{sex} '
-#                      f'is_first_speaker:{is_first_speaker} '
-#                      f'type:conversation_side '
-#                      f'avg_length:{avg_length} '
-#                      f'side:"{side}"')
-
-#         # Write to the output file
-#         output_file.write(formatted.lower() + "\n")
-
 def side_to_sentences(text):
     # Convert tuple into paragraph
     text = ''.join(text)
@@ -209,16 +99,10 @@ DIVISIVE_WORDS = ['husband', 'wonderful', 'wear', 'dress', 'wife', 'huhuh', 'goo
                   'ours', 'university', 'love',]
 
 def format_partial_conversation(features, tuple_of_sentences):
-    # Get average length of sentences
     sentences, num_sentences = side_to_sentences(tuple_of_sentences)
-    # lengths = []
-    # for sent in sentences:
-    #     lengths.append(len(nltk.tokenize.word_tokenize(sent)))
-
-    
     
     tokens = nltk.word_tokenize(sentences)
-    nontrivial_tokens = [token for token in tokens if len(token) > 1]
+    # nontrivial_tokens = [token for token in tokens if len(token) > 1]
 
     lemmata = []
 
@@ -226,15 +110,19 @@ def format_partial_conversation(features, tuple_of_sentences):
         pos = get_wordnet_pos(word)
         lemmata.append(lemmatizer.lemmatize(word, pos=pos))
 
-    # Very effective: 55.14%
-    # for word in DIVISIVE_WORDS:
-    #     if word in lemmata:
-    #         features[f'has_{word}'] = "True"
-    #     else:
-    #         features[f'has_{word}'] = "False"
+    ## Very effective: 55.14%
+    for word in DIVISIVE_WORDS:
+        if word in lemmata:
+            features[f'has_{word}'] = "True"
+        else:
+            features[f'has_{word}'] = "False"
+    
+    ## Not very effective: 50.26% 
+    features['interrupted'] = "-" in sentences
 
 
-    # Not very effective: 50.27%
+
+    ## Not very effective: 50.27%
     # features['mentions_children'] = reduce(lambda a, b: a or b, 
     #                            [word in lemmata for word in ["child",
     #                                                       "kid",
@@ -243,6 +131,7 @@ def format_partial_conversation(features, tuple_of_sentences):
     #                                                       "baby",
     #                                                       ]])
 
+    ## No effect
     # avg_sentence_length = len(tokens) / num_sentences
     # if avg_sentence_length < 7:
     #     features['avg_length'] = "short"
@@ -252,7 +141,7 @@ def format_partial_conversation(features, tuple_of_sentences):
     #     features['avg_length'] = "long"
 
 
-    ### Pronoun features
+    ### Pronoun features: no effect on accuracy
     # # Count pronouns, loop is faster than .count here
     # num_prons, fp_prons, sp_prons = 0,0,0 
     # male_tp_prons, female_tp_prons, neutral_tp_prons = 0,0,0
@@ -279,7 +168,7 @@ def format_partial_conversation(features, tuple_of_sentences):
     # features['primary_person_prons'] = "na"
     # features['primary_gender_prons'] = "na"
 
-    # # No effect on accuracy
+    ## No effect on accuracy
     # if fp_prons > sp_prons:
     #     features['primary_fp_vs_sp_prons'] = "fp"
     #     if fp_prons > tp_prons:
@@ -293,7 +182,7 @@ def format_partial_conversation(features, tuple_of_sentences):
     #     elif tp_prons > sp_prons:
     #         features['primary_person_prons'] = "tp"
 
-    # # Zero effect on accuracy
+    ## Zero effect on accuracy
     # if neutral_tp_prons > male_tp_prons:
     #     if neutral_tp_prons > female_tp_prons:
     #         features['primary_gender_prons'] = "neutral"
@@ -305,14 +194,14 @@ def format_partial_conversation(features, tuple_of_sentences):
     #     elif female_tp_prons > male_tp_prons:
     #         features['primary_gender_prons'] = "female"
 
-    # # Analyze word lengths slightly more than naively
-    word_lens = list(map(len, nontrivial_tokens))
+    ## Analyze word lengths slightly more than naively
+    # word_lens = list(map(len, nontrivial_tokens))
 
-    # # This should account for skewed data where someone uses lots of small words
-    if len(word_lens) > 0:
-        avg_word_length = statistics.mean(word_lens) / num_sentences
-    else:
-        return None
+    ## This should account for skewed data where someone uses lots of small words
+    # if len(word_lens) > 0:
+    #     avg_word_length = statistics.mean(word_lens) / num_sentences
+    # else:
+    #     return None
     
     ## Zero change to accuracy
     # if avg_word_length >= 6:
@@ -325,7 +214,7 @@ def format_partial_conversation(features, tuple_of_sentences):
 
     ## Zero change to accuracy
     ## This should be more representative of medium-length words
-    nontrivial_word_lens = [n / num_sentences for n in word_lens if n > 3]
+    # nontrivial_word_lens = [n / num_sentences for n in word_lens if n > 3]
     # if len(nontrivial_word_lens) > 0:
     #     median_nontrivial_word_length = statistics.median(nontrivial_word_lens)
     # else:
@@ -339,7 +228,7 @@ def format_partial_conversation(features, tuple_of_sentences):
     #     features['median_nontrivial_word_length'] = "short"
 
 
-    # about ~16% of english words are 8 or longer characters
+    ## about ~16% of english words are 8 or longer characters
 
     # features['has_long_word_by_chars'] = "False"
     # for n in nontrivial_word_lens:
@@ -351,7 +240,7 @@ def format_partial_conversation(features, tuple_of_sentences):
     # This has some small issues with apostrophes, since we split on them before. 
     syllable_counts = [len(syllable_tokenizer.tokenize(word)) for word in tokens]
     
-    avg_sent_syllables = sum(syllable_counts) / num_sentences
+    # avg_sent_syllables = sum(syllable_counts) / num_sentences
 
     # No change to accuracy
     # if avg_sent_syllables > 30:
@@ -362,7 +251,7 @@ def format_partial_conversation(features, tuple_of_sentences):
     #     features['avg_sent_syllables'] = "few"
 
     # if len(syllable_counts) > 0:
-    #     avg_num_syllables = statistics.mean(syllable_counts)
+    #     avg_num_syllables = statistics.mean(syllable_counts) / num_sentences
     # else:
     #     return None
 
@@ -380,24 +269,29 @@ def format_partial_conversation(features, tuple_of_sentences):
     # else:
     #     features['median_nontrivial_syllables'] = "few"
 
-    # features['has_trisyllabic_or_longer'] = "False"
-    # features['has_really_long'] = "False"
+    # features['has_3_syllable_or_longer'] = "False"
+    # features['has_4_syllable_or_longer'] = "False"
+    # features['has_5_syllable_or_longer'] = "False"
 
-    # for n in syllable_counts:
-    #     if n >= 4:
-    #         features['has_trisyllabic_or_longer'] = "True"
-    #         features['has_really_long'] = "True"
-    #         break
-    #     elif n >= 3:
-    #         features['has_trisyllabic_or_longer'] = "True"
+    for n in syllable_counts:
+        if n >= 5:
+            features['has_3_syllable_or_longer'] = "True"
+            features['has_4_syllable_or_longer'] = "True"
+            features['has_5_syllable_or_longer'] = "True"
+            break
+        if n >= 4:
+            features['has_3_syllable_or_longer'] = "True"
+            features['has_4_syllable_or_longer'] = "True"
+        if n >= 3:
+            features['has_3_syllable_or_longer'] = "True"
 
     # Create the formatted FastText line
     formatted = f"__label__{features['sex']} "
     for feature in features.keys():
         if feature == 'sex':    # Already did this one as __label__ for FastText
             continue
-        formatted += f"{feature}:{features[feature]} "
-    #formatted += f'partial_conversation:"{tuple_of_sentences}"'
+        formatted += f"{feature}:{str(features[feature])} "
+    formatted += f'partial_conversation:"{tuple_of_sentences}"'
     return formatted
 
 def add_partial_conversations(output_file, transcript, mode):
@@ -405,29 +299,51 @@ def add_partial_conversations(output_file, transcript, mode):
     idx = transcript.conversation_no
 
     for caller in ["A", "B"]:
-        features = {'sex': (metadata[idx]["from_caller_sex"] if caller == "A"
-                            else metadata[idx]["to_caller_sex"])}
+        features = defaultdict(str)
+        features['sex'] = (metadata[idx]["from_caller_sex"] if caller == "A"
+                            else metadata[idx]["to_caller_sex"])
 
         # Get all sentences spoken by caller A
+        interrupts = False
         side = []
+        utt_features_to_check = [
+            # 'bh', # no effect
+            'ba', # huge effect: 56.35% accuracy
+            # '^g', # no effect
+            # 'fa', # no effect
+            # 'ft', # no effect
+            'ar', # slight effect: 50.50% 
+            'nn', # slight effect: 50.82% accuracy
+            # 'ng', # no effect
+            # 'bf', # no effect
+            ]
         for utt in transcript.utterances:
             if utt.caller == caller:
                 side.append(utt)
-        GRAM_LENGTH = 6
+                for feat in utt_features_to_check:
+                    if utt.act_tag == feat:
+                        features[feat] = True
+            elif not interrupts:
+                if "-" in utt.text:
+                    interrupts = True
+
+        for feat in utt_features_to_check:
+            if not features[feat]:
+                features[feat] = False
+
+        GRAM_LENGTH = 50
+        global COUNT
 
         # Use itertools.combinations to get every possible combination of 10
         # sentences spoken by caller A
         sentence_ngrams = []
         utterance_strings = [utt.text for utt in side]
         if len(side) < GRAM_LENGTH:
+            COUNT += 1
+
             sentence_ngrams = [utterance_strings]
         else:
             sentence_ngrams = [random.sample(utterance_strings, GRAM_LENGTH) for _ in range(int(3 * (len(side) // GRAM_LENGTH)))]
-        # elif mode == 'TEST':
-        #     # Take duples of sentences
-        #     sentence_ngrams = list(itertools.combinations(
-        #         utterance_strings, 2))
-        
             
         # Pre-count total number of each sex's entry
         if mode == 'TRAIN':
@@ -457,8 +373,17 @@ def add_partial_conversations(output_file, transcript, mode):
         TRAIN_DISCARD_PROBABILITY = 1 - (10910.0 / 14310.0)
         VAL_DISCARD_PROBABILITY = 1 - (4685 / 6987)
 
+        features['interrupts'] = str(interrupts)
+
         # Process every combination of GRAM_LENGTH sentences
         for sentence_ngram in sentence_ngrams:
+            sentence_lemmas = get_word_lemma_counts(sentence_ngram)
+            for lemma, count in sentence_lemmas.items():
+                wordcounts[lemma] += count
+                if features["sex"] == 'MALE':
+                    male_wordcounts[lemma] += count
+                elif features["sex"] == 'FEMALE':
+                    female_wordcounts[lemma] += count
             # Discard all excess female entries to balance training data
             if mode == "TRAIN" and features["sex"] == TRAIN_MOST_COMMON_SEX:
                 if np.random.random() < TRAIN_DISCARD_PROBABILITY:
@@ -468,31 +393,11 @@ def add_partial_conversations(output_file, transcript, mode):
                 if np.random.random() < VAL_DISCARD_PROBABILITY:
                     VAL_DISCARDED_ENTRIES += 1
                     continue
+            
 
             formatted = format_partial_conversation(features, sentence_ngram)
             if formatted:
                 output_file.write(formatted + "\n")
-        # print(f"Processed all {GRAM_LENGTH}-utt subsets of caller {caller}'s "
-        #       f"side of conversation {idx}")
-
-    '''
-        sentences = nltk.tokenize.sent_tokenize(side)
-        broken_at_slashes = []
-        for sent in sentences:
-            broken_at_slashes.extend(sent.split("/"))
-
-        lengths = []
-        for sent in broken_at_slashes:
-            lengths.append(len(nltk.tokenize.word_tokenize(sent)))
-
-        avg_sentence_length = sum(lengths) / len(lengths)
-        if avg_sentence_length < 7:
-            avg_length = "short"
-        elif avg_sentence_length < 14:
-            avg_length = "medium"
-        else:
-            avg_length = "long"
-    '''
 
 def make_fasttext(subdirs, output_file, Transcript, mode):
     with open(output_file, 'w') as outfile:
@@ -516,10 +421,7 @@ def make_fasttext(subdirs, output_file, Transcript, mode):
                         print(f"Error processing file {filepath}: {e}")
                         continue
 
-                    # add_words(outfile, transcript)
-                    # add_conversations(outfile, transcript)
                     add_partial_conversations(outfile, transcript, mode = mode)
-                    # add_sentences(outfile, transcript)
 
     print(f"Saved sentences and conversation sides to {output_file}")
 
@@ -608,8 +510,7 @@ def train():
 
     # Train and test the model on training set
     model = fasttext.train_supervised(train_ft,
-                                      # lr=1.0,
-                                      epoch=4,
+                                      epoch=35,
                                       )
     train_performance = model.test('train.ft')
     print(f"Performance on train set "
@@ -621,14 +522,18 @@ def train():
     trained = time.time()
     print(f"Finished training in {trained - start:.2f} seconds")
 
+    print(COUNT)
+
     validate(model, VALIDATION_DIRS, Transcript)
+
+    print(COUNT)
 
     print(f"{VAL_MALE_ENTRIES} male partial conversations in validation")
     print(f"{VAL_FEMALE_ENTRIES} female partial conversations in validation")
     print(f"{VAL_DISCARDED_ENTRIES} discarded partial conversations in validation")
 
     # No peeking
-    # test(model, TEST_DIRS, Transcript)
+    test(model, TEST_DIRS, Transcript)
 
     end = time.time()
     print(f"Finished overall in {end - start:.2f} seconds")
